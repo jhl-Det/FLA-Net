@@ -4,9 +4,7 @@ Official implementation for paper "Shifting More Attention to Breast Lesion Segm
 
 
 ### Dataset preparation
-This database is available for only non-commercial use in research or educational purposes. 
-As long as you use the database for these purposes, you can edit or process images and annotations in this database.
-Please get in touch with us to get access to our dataset.
+Our dataset is currently undergoing ethical review and authorization processes within the relevant hospital. Once completed, we will make the dataset public.
 
 
 
