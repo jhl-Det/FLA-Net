@@ -23,24 +23,6 @@ from segmentation_models_pytorch import create_model
   
 cudnn.benchmark = True
 
-# build the model
-# archs = [
-#     Unet,
-#     UnetPlusPlus,
-#     MAnet,
-#     Linknet,
-#     FPN,
-#     PSPNet,
-#     DeepLabV3,
-#     DeepLabV3Plus,
-#     PAN,
-# ]
-# model = smp.Unet(
-#     encoder_name="resnet50",
-#     encoder_weights="imagenet",
-#     in_channels=3,
-#     classes=1,
-# )
 model = create_model(
     arch=opt.arch, 
     encoder_name="timm-res2net50_26w_4s",
@@ -70,7 +52,7 @@ else:
 #set the path
 data_root = opt.data_root
 train_file    = "train_list.csv"
-val_file      = "val_list.csv"
+val_file      = "test_list.csv"
 
 save_path        = opt.save_path
 
@@ -86,7 +68,7 @@ total_step   = len(train_loader)
 
 
 logging.basicConfig(filename=save_path+'log.log',format='[%(asctime)s-%(filename)s-%(levelname)s:%(message)s]', level = logging.INFO,filemode='a',datefmt='%Y-%m-%d %I:%M:%S %p')
-logging.info("BBSNet_unif-Train")
+# logging.info("BBSNet_unif-Train")
 logging.info("Config")
 logging.info('epoch:{};lr:{};batchsize:{};trainsize:{};clip:{};decay_rate:{};load:{};save_path:{};decay_epoch:{}'.format(opt.epoch,opt.lr,opt.batchsize,opt.trainsize,opt.clip,opt.decay_rate,opt.load,save_path,opt.decay_epoch))
 
@@ -99,17 +81,12 @@ best_epoch = 0
 print(len(train_loader))
 
 def heatmap_loss(pred, gt):
-    # print(pred.shape, mask.shape)
-
     assert pred.size() == gt.size()
-    loss = ((pred - gt)**2).expand_as(pred)
-    loss = loss.mean(dim=2).mean(dim=1).mean(dim=0)
+    loss = (pred - gt)**2
+    loss = loss.mean()
     return loss
 
 def structure_loss(pred, mask):
-    # print(pred.shape, mask.shape)
-    # return CE2(pred, mask)
-
     weit  = 1+5*torch.abs(F.avg_pool2d(mask, kernel_size=31, stride=1, padding=15)-mask)
     wbce  = F.binary_cross_entropy_with_logits(pred, mask, reduce='none')
     
@@ -136,14 +113,12 @@ def train(train_loader, model, optimizer, epoch,save_path):
             gts      = gts.cuda()
             hms      = hms.cuda()
 
-
-            ##
             pre_res, hm_preds  = model(images)
             
             loss    = structure_loss(pre_res, gts) 
             hm_loss = heatmap_loss(hm_preds[-1].squeeze(),  hms.squeeze())
             
-            all_loss = loss + hm_loss
+            all_loss = loss + 0.5 * hm_loss
             all_loss.backward()
 
             clip_gradient(optimizer, opt.clip)
@@ -181,7 +156,7 @@ def val(test_loader,model,epoch,save_path):
     with torch.no_grad():
         mae_sum=0
         for i in tqdm(range(test_loader.size)):
-            image, gt, name, img_for_post, hm = test_loader.load_data()
+            image, gt, *_ = test_loader.load_data()
             gt      = np.asarray(gt, np.float32)
             gt     /= (gt.max() + 1e-8)
             image   = image.cuda()
@@ -211,15 +186,13 @@ if __name__ == '__main__':
     
     if opt.load is not None:
         val(test_loader, model, 1, save_path)
-
+    # import pdb; pdb.set_trace()
     for epoch in range(1, opt.epoch):
         
         cur_lr = adjust_lr(optimizer, opt.lr, epoch, opt.decay_rate, opt.decay_epoch)
-        writer.add_scalar('learning_rate', cur_lr, global_step=epoch)
-        # val(test_loader, model, epoch, save_path)
-        
+        print("cur_lr", cur_lr)
         train(train_loader, model, optimizer, epoch, save_path)
         print("----"*10)
         #test
-        if epoch % 5 == 0:
-            val(test_loader, model, epoch, save_path)
+        # if epoch % 10 == 0:
+            # val(test_loader, model, epoch, save_path)
